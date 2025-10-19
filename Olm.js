@@ -1,726 +1,380 @@
 // ==UserScript==
-
 // @name         TIỆP GÀ CUI (Final Launch Fix)
-
 // @namespace    http://olm.vn/
-
 // @version      72.0
-
 // @description  Sửa lỗi khởi chạy, đảm bảo script luôn hoạt động trên mọi trang OLM.
-
 // @author       TIỆP GÀ CUI
-
 // @match        *://*.olm.vn/*
-
+// @updateURL    https://raw.githubusercontent.com/tiep555666-design/Olm/main/Olm.js
+// @downloadURL  https://raw.githubusercontent.com/tiep555666-design/Olm/main/Olm.js
 // @grant        GM_xmlhttpRequest
-
 // @grant        GM_setValue
-
 // @grant        GM_getValue
-
 // @connect      bj-microsoft-search-ai.vercel.app
-
 // @connect      cdnjs.cloudflare.com
-
 // @run-at       document-idle
-
 // ==/UserScript==
 
 (function() {
-
     'use strict';
 
     // --- CÁC THAM SỐ CẤU HÌNH ---
-
     const LOGO_URL = "https://i.imgur.com/Z6fpv3P.jpeg";
-
     const AUTHOR_NAME = "TIỆP GÀ CUI";
-
     const BOX_ID = "ai-helper-box-tiegia";
-
     let isMinimized = false;
-
     let lastScannedQuestionText = "";
 
     // --- THÊM THƯ VIỆN BÊN NGOÀI ---
-
     function loadScript(src, callback) {
-
         const script = document.createElement('script');
-
         script.src = src;
-
         if (callback) script.onload = callback; // Only assign callback if it exists
-
         document.head.appendChild(script);
-
     }
 
     // Delay loading slightly to ensure head is ready
-
     setTimeout(() => {
-
         loadScript('https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js');
-
         const katexCSS = document.createElement('link');
-
         katexCSS.rel = 'stylesheet';
-
         katexCSS.href = 'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css';
-
         document.head.appendChild(katexCSS);
-
         loadScript('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js', () => {
-
             loadScript('https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js');
-
         });
-
     }, 500); // Wait 500ms
 
     // --- CSS CHO GIAO DIỆN ---
-
     const customCSS = `
-
         :root { /* Dark Theme */ --bg-color: #282c34; --text-color: #f0f0f0; --border-color: #444; --input-bg: #3a3f4b; --gradient-start: #2a2a72; --gradient-end: #009ffd; }
-
         .ai-helper-box { font-family: 'Roboto', sans-serif; background-color: var(--bg-color); color: var(--text-color); border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.3); position: fixed !important; top: 50px !important; left: 20px !important; width: 380px; max-height: 80vh; border: 1px solid var(--border-color); z-index: 2147483647 !important; display: flex; flex-direction: column; resize: both; overflow: hidden; } /* Added !important and higher z-index */
-
         .ai-helper-header { padding: 10px 15px; cursor: move; border-top-left-radius: 12px; border-top-right-radius: 12px; background-image: linear-gradient(90deg, var(--gradient-start), var(--gradient-end)); display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: #FFF; text-shadow: 0px 0px 6px rgba(0,0,0,0.5); }
-
         .ai-helper-header-title { display: flex; align-items: center; }
-
         .ai-helper-header img.ai-helper-logo { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; margin-right: 10px; }
-
         .ai-helper-controls button { background: none; border: none; color: white; cursor: pointer; font-size: 16px; margin-left: 8px; padding: 0 4px; }
-
         .ai-helper-content { padding: 15px; overflow-y: auto; word-wrap: break-word; flex-grow: 1; min-height: 50px; }
-
         .ai-helper-content::-webkit-scrollbar { width: 8px; } .ai-helper-content::-webkit-scrollbar-track { background: var(--input-bg); } .ai-helper-content::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; } .ai-helper-content::-webkit-scrollbar-thumb:hover { background: #555; }
-
         .ai-helper-footer { display: flex; padding: 10px; border-top: 1px solid var(--border-color); }
-
         .ai-helper-input { flex-grow: 1; margin-right: 10px; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 5px; color: var(--text-color); padding: 8px; }
-
         .ai-helper-send-btn { background-image: linear-gradient(90deg, var(--gradient-start), var(--gradient-end)); color: white; border: none; border-radius: 5px; padding: 8px 15px; cursor: pointer; }
-
         .ai-helper-send-btn:hover { opacity: 0.9; }
-
         .ai-solve-button { display: inline-block; margin-left: 10px; background-image: linear-gradient(90deg, #565869, #343541); border: 1px solid #6a6c7b; color: white !important; padding: 3px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em; font-weight: bold; vertical-align: middle; }
-
         .ai-solve-button:hover { opacity: 0.9; }
-
         /* Light Theme */
-
         .ai-helper-box.light-theme { --bg-color: #ffffff; --text-color: #212529; --border-color: #dee2e6; --input-bg: #f8f9fa; }
-
         .ai-helper-box.light-theme .ai-helper-content::-webkit-scrollbar-thumb { background: #ccc; } .ai-helper-box.light-theme .ai-helper-content::-webkit-scrollbar-thumb:hover { background: #aaa; }
-
     `;
 
     // Append CSS early
-
     function addStyles() {
-
         if (!document.head) {
-
              // If head is not ready, try again shortly
-
              setTimeout(addStyles, 50);
-
              return;
-
         }
-
         const styleSheet = document.createElement("style");
-
         styleSheet.innerText = customCSS;
-
         document.head.appendChild(styleSheet);
-
     }
-
     addStyles(); // Call the function to add styles
 
     // --- HÀM GỌI API ---
-
     function askAI(query) {
-
         let instruction = " Hãy chọn đáp án đúng nhất và giải thích ngắn gọn tại sao. Không giải thích các đáp án sai.";
-
         if (window.location.href.includes('/ly-thuyet-')) {
-
              instruction = " Dựa vào ngữ cảnh được cung cấp (nếu có), hãy chọn đáp án đúng nhất cho câu hỏi luyện tập và giải thích ngắn gọn.";
-
         }
-
         const modifiedQuery = query + instruction;
-
         const apiUrl = `https://bj-microsoft-search-ai.vercel.app/?chat=${encodeURIComponent(modifiedQuery)}`;
 
         GM_xmlhttpRequest({
-
             method: "GET", url: apiUrl, timeout: 90000,
-
             onload: function(response) {
-
                 try {
-
                     let aiResponse = "";
-
                     try { const result = JSON.parse(response.responseText); aiResponse = result.response || result.text || JSON.stringify(result); } catch (e) { aiResponse = response.responseText; }
-
                     let cleanedResponse = aiResponse;
-
                     const startMarkers = ["chắc chắn rồi", "đáp án đúng là", "dĩ nhiên", "###", "**Question 1**", "**Câu 1**"];
-
                     let bestStartIndex = -1;
-
                     for (const marker of startMarkers) { const index = aiResponse.toLowerCase().indexOf(marker); if (index !== -1) { bestStartIndex = index; break; } }
-
                     if (bestStartIndex !== -1) { cleanedResponse = aiResponse.substring(bestStartIndex); }
-
                     else { const partsDash = aiResponse.split('—'); if (partsDash.length > 1) { cleanedResponse = partsDash.slice(1).join('—').trim(); } }
-
                     if (cleanedResponse) { renderResponse(cleanedResponse); } else { displayResults(`❌ AI không trả lời. Phản hồi trống.`); }
-
                 } catch (e) { displayResults(`❌ Lỗi xử lý phản hồi: ${e.message}`); }
-
             },
-
             onerror: function() { displayResults("❌ Lỗi mạng khi kết nối tới máy chủ Proxy."); },
-
             ontimeout: function() { displayResults("⏳ Yêu cầu tới máy chủ Proxy hết thời gian chờ."); },
-
         });
-
     }
 
     // --- CÁC HÀM GIAO DIỆN ---
-
     function renderResponse(aiText) {
-
         // Ensure Showdown is loaded before using it
-
         if (window.showdown && typeof showdown === 'object') {
-
             const converter = new showdown.Converter({ simpleLineBreaks: true, strikethrough: true, tables: true });
-
             const markdownText = aiText.replace(/###/g, '\n---\n');
-
             const htmlText = converter.makeHtml(markdownText);
-
             displayResults(htmlText);
-
         } else {
-
              // Fallback if Showdown hasn't loaded yet
-
             setTimeout(() => renderResponse(aiText), 200); // Try again shortly
-
             displayResults(aiText.replace(/\n/g, '<br>')); // Display raw text temporarily
-
         }
-
     }
 
     function applySavedTheme(boxElement, buttonElement) {
-
         const savedTheme = GM_getValue('ai_theme', 'dark');
-
             if (savedTheme === 'light') {
-
                 boxElement.classList.add('light-theme');
-
                 buttonElement.innerText = '🌙';
-
             } else {
-
                 boxElement.classList.remove('light-theme');
-
                 buttonElement.innerText = '☀️';
-
             }
-
     }
 
     function displayResults(contentHtml) {
-
         let resultBox = document.getElementById(BOX_ID);
-
         let themeToggleButton;
-
         if (!resultBox) {
-
             resultBox = document.createElement("div"); resultBox.id = BOX_ID; resultBox.className = "ai-helper-box";
-
             const header = document.createElement("div"); header.className = "ai-helper-header";
-
             header.innerHTML = `<div class="ai-helper-header-title"><img src="${LOGO_URL}" class="ai-helper-logo"><span>CRACK OLM.VN - ${AUTHOR_NAME}</span></div>`;
 
             const controls = document.createElement("div"); controls.className = 'ai-helper-controls';
-
             themeToggleButton = document.createElement("button");
-
             themeToggleButton.title = "Chuyển giao diện Sáng/Tối";
 
+            themeToggleButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const box = document.getElementById(BOX_ID);
+                const isLight = box.classList.toggle('light-theme');
+                if (isLight) {
+                    GM_setValue('ai_theme', 'light');
+                    themeToggleButton.innerText = '🌙';
+                } else {
+                    GM_setValue('ai_theme', 'dark');
+                    themeToggleButton.innerText = '☀️';
+                }
+            });
+
             const rescanButton = document.createElement("button"); rescanButton.innerHTML = "🔍"; rescanButton.title = "Quét và giải lại câu hỏi";
-
             rescanButton.addEventListener('click', (e) => { e.stopPropagation(); handleAutoAnswer(); });
-
             const toggleButton = document.createElement("button"); toggleButton.innerText = "_";
-
             const closeButton = document.createElement("button"); closeButton.innerText = "x";
-
             const content = document.createElement("div"); content.className = "ai-helper-content";
-
             const footer = document.createElement("div"); footer.className = "ai-helper-footer";
 
             toggleButton.addEventListener("click", (e) => { e.stopPropagation(); isMinimized = !isMinimized; content.style.display = isMinimized ? "none" : "flex"; footer.style.display = isMinimized ? "none" : "flex"; resultBox.style.resize = isMinimized ? "none" : "both"; toggleButton.innerText = isMinimized ? "□" : "_"; });
-
             closeButton.addEventListener("click", (e) => { e.stopPropagation(); resultBox.remove(); });
 
             controls.appendChild(themeToggleButton);
-
             controls.appendChild(rescanButton);
-
             controls.appendChild(toggleButton);
-
             controls.appendChild(closeButton);
-
             header.appendChild(controls);
 
             const input = document.createElement("input"); input.type = "text"; input.placeholder = "Nhập câu hỏi mới..."; input.className = "ai-helper-input";
-
             const sendButton = document.createElement("button"); sendButton.innerText = "Gửi"; sendButton.className = "ai-helper-send-btn";
-
             const handleSend = () => { const query = input.value.trim(); if (query) { displayResults("AI đang suy nghĩ, vui lòng chờ..."); askAI(query); input.value = ""; } };
-
             sendButton.addEventListener("click", handleSend); input.addEventListener("keydown", (e) => { if (e.key === "Enter") { handleSend(); } });
 
             footer.appendChild(input); footer.appendChild(sendButton);
-
             resultBox.appendChild(header); resultBox.appendChild(content); resultBox.appendChild(footer);
 
-            // Append to body only if body exists
-
              if (document.body) {
-
                  document.body.appendChild(resultBox);
-
                  makeDraggable(resultBox, header);
-
-                 applySavedTheme(resultBox, themeToggleButton); // Apply theme after adding to body
-
-                 themeToggleButton.addEventListener('click', (e) => { /* Theme toggle logic */ });
-
+                 applySavedTheme(resultBox, themeToggleButton);
              } else {
-
                  document.addEventListener('DOMContentLoaded', () => {
-
                      document.body.appendChild(resultBox);
-
                      makeDraggable(resultBox, header);
-
-                     applySavedTheme(resultBox, themeToggleButton); // Apply theme after adding to body
-
-                     themeToggleButton.addEventListener('click', (e) => { /* Theme toggle logic */ });
-
+                     applySavedTheme(resultBox, themeToggleButton);
                  });
-
              }
-
         } else {
-
             themeToggleButton = resultBox.querySelector('.ai-helper-controls button:first-child');
-
             if(themeToggleButton) applySavedTheme(resultBox, themeToggleButton);
-
         }
 
         const url = window.location.href;
-
         if (url.includes('/ly-thuyet-') || url.includes('/phieu-bai-tap')) {
-
             resultBox.classList.add('long-content');
-
         } else {
-
             resultBox.classList.remove('long-content');
-
         }
 
         const contentElement = resultBox.querySelector(".ai-helper-content");
-
         contentElement.innerHTML = contentHtml;
 
-        // Ensure Katex is loaded before rendering
-
         if (window.renderMathInElement && typeof renderMathInElement === 'function') {
-
             try {
-
                 renderMathInElement(contentElement, { delimiters: [ {left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}, {left: '\\(', right: '\\)', display: false}, {left: '\\[', right: '\\]', display: true} ], throwOnError : false });
-
             } catch(e){ console.error("AI Helper: KaTeX rendering error:", e); }
-
         } else {
-
-             // If KaTeX hasn't loaded yet, wait a bit and try again
-
              setTimeout(() => {
-
                  if (window.renderMathInElement && typeof renderMathInElement === 'function') {
-
                      try {
-
                          renderMathInElement(contentElement, { delimiters: [ {left: '$$', right: '$$', display: true}, {left: '$', right: '$', display: false}, {left: '\\(', right: '\\)', display: false}, {left: '\\[', right: '\\]', display: true} ], throwOnError : false });
-
                      } catch(e){ console.error("AI Helper: KaTeX rendering error (retry):", e); }
-
                  }
-
              }, 1000);
-
         }
-
     }
 
     function makeDraggable(element, dragHandle, onClickCallback) {
-
         let offsetX, offsetY, moved;
-
         dragHandle.onmousedown = function(e) {
-
             e.preventDefault(); const rect = element.getBoundingClientRect();
-
             element.style.top = rect.top + 'px';
-
             element.style.left = rect.left + 'px';
-
             element.style.right = ''; element.style.bottom = '';
-
             offsetX = e.clientX - rect.left; offsetY = e.clientY - rect.top;
-
             moved = false;
-
             document.onmousemove = onMouseMove; document.onmouseup = onMouseUp;
-
         };
-
         function onMouseMove(e) {
-
             moved = true;
-
             element.style.top = (e.clientY - offsetY) + 'px';
-
             element.style.left = (e.clientX - offsetX) + 'px';
-
         }
-
         function onMouseUp() {
-
             document.onmousemove = null; document.onmouseup = null;
-
             if (!moved && onClickCallback) { onClickCallback(); }
-
         }
-
-    }
-
-    function showCustomPrompt() {
-
-        if (document.querySelector('.ai-input-overlay')) return;
-
-        const overlay = document.createElement('div');
-
-        overlay.className = 'ai-input-overlay';
-
-        const modal = document.createElement('div');
-
-        modal.className = 'ai-input-modal';
-
-        modal.innerHTML = `<h3>Nhập câu hỏi cho AI</h3><textarea id="ai-custom-prompt-input" placeholder="Nhập câu hỏi của bạn tại đây..."></textarea><div class="ai-input-buttons"><button class="ai-input-btn-cancel">Hủy</button><button class="ai-input-btn-submit">Gửi</button></div>`;
-
-        overlay.appendChild(modal);
-
-        document.body.appendChild(overlay);
-
-        const textarea = document.getElementById('ai-custom-prompt-input');
-
-        textarea.focus();
-
-        const closeModal = () => overlay.remove();
-
-        const submit = () => {
-
-            const question = textarea.value.trim();
-
-            if (question) { displayResults("AI đang suy nghĩ, vui lòng chờ..."); askAI(question); closeModal(); }
-
-        };
-
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
-
-        modal.querySelector('.ai-input-btn-cancel').addEventListener('click', closeModal);
-
-        modal.querySelector('.ai-input-btn-submit').addEventListener('click', submit);
-
-        textarea.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } });
-
     }
 
     // --- HÀM TÌM CÂU HỎI ---
-
     function findQuestionOnPage() {
-
         const prioritySelectors = [ '.textLayer', '#question', '.itemx', '.question-container', '.quiz-content', '.entry-content', '.main-content' ];
-
         for (const selector of prioritySelectors) {
-
             const el = document.querySelector(selector);
-
             if (el && el.offsetParent !== null && el.innerText.trim().length > 50) { return el.innerText.trim(); }
-
         }
-
         return "";
-
     }
 
     // --- LOGIC GẮN NÚT (Cho chế độ lý thuyết) ---
-
     function getCleanQuestionText(blockElement) {
-
         let fullText = blockElement.innerText || "";
-
         const stopMarkers = ["Kiểm tra", "🤖 Giải"];
-
         let endIndex = -1;
-
         for (const marker of stopMarkers) {
-
             const index = fullText.indexOf(marker);
-
             if (index !== -1) {
-
                 if (endIndex === -1 || index < endIndex) endIndex = index;
-
             }
-
         }
-
         if (endIndex !== -1) return fullText.substring(0, endIndex).trim();
-
         return fullText.trim();
-
     }
 
     function scanAndInjectButtons() {
-
         if (!window.location.href.includes('/ly-thuyet-')) return;
-
         const quizBlocks = document.querySelectorAll('.quiz-list, .box-lymthuyet-luyentap');
-
         let injectedCount = 0;
-
         quizBlocks.forEach(block => {
-
             if (block.dataset.aiInjected || block.offsetParent === null) return;
-
             const questionContent = getCleanQuestionText(block);
-
             if (questionContent.length > 40) {
-
                  const titleElement = Array.from(block.querySelectorAll('strong, b, h4, p')).find(el => /^(Luyện tập|Bài \d+|Câu \d+|Question \d+)/i.test(el.innerText.trim())) || block.firstElementChild || block;
-
                  if (titleElement && !titleElement.querySelector('.ai-solve-button')) {
-
                     const solveButton = document.createElement('span');
-
                     solveButton.className = 'ai-solve-button';
-
                     solveButton.innerText = '🤖 Giải';
-
                     solveButton.title = 'Giải câu hỏi này bằng AI';
-
                     solveButton.addEventListener('click', (e) => {
-
                         e.stopPropagation(); e.preventDefault();
-
                         displayResults("AI đang phân tích câu hỏi này...");
-
                         askAI(questionContent);
-
                     });
-
                     titleElement.appendChild(solveButton);
-
                     block.dataset.aiInjected = 'true';
-
                     injectedCount++;
-
                  }
-
             }
-
         });
-
         if (injectedCount > 0) console.log(`Đã quét và gắn nút giải cho ${injectedCount} câu hỏi lý thuyết.`);
-
     }
 
     // --- HÀM XỬ LÝ TỰ ĐỘNG (Cho chế độ bài tập) ---
-
     function handleAutoAnswer() {
-
         if (window.location.href.includes('/ly-thuyet-')) return;
-
         const question = findQuestionOnPage();
-
         if (question && question !== lastScannedQuestionText) {
-
             lastScannedQuestionText = question;
-
             displayResults("Đã phát hiện câu hỏi mới, AI đang trả lời...");
-
             askAI(question);
-
         }
-
     }
 
     // --- BỘ CẢM BIẾN ---
-
+    let aiDebounceTimer;
     function startObserver() {
-
         const targetNode = document.querySelector('#content-zone, #viewerContainer, .main-content, body');
-
         if (!targetNode) {
-
              console.log("AI Helper: Không tìm thấy khu vực trọng yếu để theo dõi.");
-
              return;
-
         }
-
         const config = { childList: true, subtree: true, characterData: true };
-
         const observer = new MutationObserver(() => {
-
-            clearTimeout(window.aiDebounceTimer);
-
+            clearTimeout(aiDebounceTimer);
             if (window.location.href.includes('/ly-thuyet-')) {
-
-                 window.aiDebounceTimer = setTimeout(scanAndInjectButtons, 1500);
-
+                 aiDebounceTimer = setTimeout(scanAndInjectButtons, 1500);
             } else {
-
-                 window.aiDebounceTimer = setTimeout(handleAutoAnswer, 1500);
-
+                 aiDebounceTimer = setTimeout(handleAutoAnswer, 1500);
             }
-
         });
-
         observer.observe(targetNode, config);
-
         console.log("AI Helper: Cảm biến đã được kích hoạt trên", targetNode);
-
     }
 
     // --- TẠO NÚT TRÒN ---
-
     function createMobileButton() {
-
         if (document.getElementById('ai-mobile-button')) return; // Avoid creating multiple buttons
-
         const aiButton = document.createElement('button');
-
         aiButton.id = 'ai-mobile-button';
-
         Object.assign(aiButton.style, { position: 'fixed', bottom: '15px', right: '15px', width: '60px', height: '60px', borderRadius: '50%', border: '2px solid white', backgroundColor: '#2a2a72', backgroundPosition: 'center', backgroundSize: 'cover', boxShadow: '0 4px 8px rgba(0,0,0,0.2)', cursor: 'grab', zIndex: '10000', backgroundImage: `url(${LOGO_URL})` });
-
         const handleButtonClick = () => {
-
              if (window.location.href.includes('/ly-thuyet-')) {
-
                 scanAndInjectButtons();
-
                 alert("Đã quét lại trang lý thuyết!");
-
              } else {
-
                 handleAutoAnswer();
-
              }
-
         };
-
-        // Ensure body exists before appending
-
         if (document.body) {
-
             document.body.appendChild(aiButton);
-
             makeDraggable(aiButton, aiButton, handleButtonClick);
-
         } else {
-
             document.addEventListener('DOMContentLoaded', () => {
-
                  if (!document.getElementById('ai-mobile-button')) {
-
                      document.body.appendChild(aiButton);
-
                      makeDraggable(aiButton, aiButton, handleButtonClick);
-
                  }
-
             });
-
         }
-
     }
 
     // --- KHỞI CHẠY SCRIPT ---
-
     function init() {
-
         console.log("AI Helper: Initializing...");
-
-        createMobileButton(); // Create button immediately if possible
-
-        // Run initial logic after a delay
-
+        createMobileButton();
         setTimeout(() => {
-
             if (window.location.href.includes('/ly-thuyet-')) {
-
                 scanAndInjectButtons();
-
             } else {
-
                 handleAutoAnswer();
-
             }
-
-        }, 3000); // Increased delay for initial load stability
-
+        }, 3000);
         startObserver();
-
     }
-
-    // Ensure script runs after the DOM is ready
 
     if (document.readyState === 'interactive' || document.readyState === 'complete') {
-
         init();
-
     } else {
-
         document.addEventListener('DOMContentLoaded', init);
-
     }
-
 })();
-
